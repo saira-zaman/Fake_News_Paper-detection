@@ -1,2 +1,2 @@
 # Fake_News_Paper-detection
-its just a basic project ,its just only a demo
+its just  a demo,futhur I'II create frontend which gave an attractive overview 
