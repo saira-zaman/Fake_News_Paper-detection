@@ -17,17 +17,23 @@ nltk.download('stopwords')
 
 def load_data():
     print("Loading data...")
-    # Adjust paths based on the file structure identified
-    fake_path = "Fake/Fake.csv"
+    # Paths - data can be in parent dir or current dir
+    fake_path = "../Fake/Fake.csv" if os.path.exists("../Fake/Fake.csv") else "Fake/Fake.csv"
     true_path = "True/True.csv"
     output_path = "output/output.csv"
     
+    print("Looking for data files...")
+    print(f"Fake path: {fake_path}")
+    print(f"True path: {true_path}")
+    
     if not os.path.exists(fake_path):
-        print(f"Error: {fake_path} not found.")
+        print(f"[ERROR] {fake_path} not found.")
         return None
     if not os.path.exists(true_path):
-        print(f"Error: {true_path} not found.")
+        print(f"[ERROR] {true_path} not found.")
         return None
+    
+    print("[OK] Loading datasets...")
         
     fake = pd.read_csv(fake_path)
     true = pd.read_csv(true_path)
