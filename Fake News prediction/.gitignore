@@ -105,12 +105,6 @@ celerybeat.pid
 credentials/
 secrets/
 
-# Model files and large binaries
-*.pkl
-*.pickle
-*.h5
-*.joblib
-
 # IDE and OS files
 .DS_Store
 .vscode/
