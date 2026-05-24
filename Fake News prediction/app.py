@@ -32,27 +32,29 @@ def ensure_nltk_data():
 ensure_nltk_data()
 
 def load_model():
-    """Load model with caching"""
+    """Load model with caching and better error handling"""
     global model_cache
     if model_cache is not None:
         return model_cache
     
     try:
-        # Try current directory
-        if os.path.exists(MODEL_PATH):
-            model_cache = joblib.load(MODEL_PATH)
-            logger.info("Model loaded successfully")
-            return model_cache
+        # Try multiple paths
+        possible_paths = [
+            'fake_news_model.pkl',
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fake_news_model.pkl'),
+            os.path.join(os.getcwd(), 'fake_news_model.pkl'),
+            os.path.join(os.getcwd(), 'Fake News prediction', 'fake_news_model.pkl'),
+            '/vercel/path0/Fake News prediction/fake_news_model.pkl'  # Vercel path
+        ]
         
-        # Try relative to script
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        model_path = os.path.join(script_dir, MODEL_PATH)
-        if os.path.exists(model_path):
-            model_cache = joblib.load(model_path)
-            logger.info("Model loaded from script directory")
-            return model_cache
+        for path in possible_paths:
+            if os.path.exists(path):
+                logger.info(f"Loading model from: {path}")
+                model_cache = joblib.load(path)
+                logger.info("✓ Model loaded successfully")
+                return model_cache
         
-        logger.warning("Model file not found")
+        logger.error(f"Model not found in any of these paths: {possible_paths}")
         return None
     except Exception as e:
         logger.error(f"Error loading model: {e}")
@@ -109,7 +111,7 @@ def predict():
         # Load model
         model = load_model()
         if model is None:
-            return jsonify({'error': 'Model not available. Please try again later'}), 503
+            return jsonify({'error': 'Model initializing. Please try again in a moment.', 'success': False}), 503
         
         # Preprocess
         processed_text = preprocess_text(text)
