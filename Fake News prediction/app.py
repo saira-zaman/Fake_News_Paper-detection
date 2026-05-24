@@ -68,14 +68,26 @@ def load_model():
         for path in possible_paths:
             if os.path.exists(path):
                 logger.info(f"✓ Loading model from: {path}")
-                model_cache = joblib.load(path)
-                logger.info("✓ Model loaded successfully")
-                return model_cache
+                model = joblib.load(path)
+                
+                # Validate model is properly fitted
+                try:
+                    # Test prediction to ensure model works
+                    test_result = model.predict(['test article'])
+                    logger.info(f"✓ Model validated with test prediction: {test_result}")
+                    model_cache = model
+                    logger.info("✓ Model loaded and cached successfully")
+                    return model_cache
+                except Exception as e:
+                    logger.error(f"✗ Model loaded but failed validation: {e}")
+                    return None
         
-        logger.error(f"✗ Model not found in any paths")
+        logger.error(f"✗ Model not found in any paths: {possible_paths}")
         return None
     except Exception as e:
         logger.error(f"✗ Error loading model: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def preprocess_text(text):
@@ -127,18 +139,25 @@ def predict():
         model = load_model()
         if model is None:
             logger.error("✗ Model not loaded")
-            return jsonify({'error': 'Model initializing. Please try again in a moment.', 'success': False}), 503
+            return jsonify({'error': 'Model initialization failed. Please contact support.', 'success': False}), 503
         
         # Preprocess
-        processed_text = preprocess_text(text)
+        try:
+            processed_text = preprocess_text(text)
+        except Exception as e:
+            logger.error(f"✗ Text preprocessing failed: {e}")
+            return jsonify({'error': 'Text could not be processed', 'success': False}), 400
         
         if not processed_text:
-            logger.error("✗ Text could not be processed")
+            logger.error("✗ Preprocessed text is empty")
             return jsonify({'error': 'Text could not be processed', 'success': False}), 400
         
         # Predict
         try:
+            # This is where the error occurs - if vectorizer is not fitted
+            logger.info(f"✓ Attempting prediction on text: {processed_text[:50]}...")
             prediction = model.predict([processed_text])[0]
+            logger.info(f"✓ Prediction result: {prediction}")
             
             # Get confidence
             try:
@@ -160,12 +179,25 @@ def predict():
                 'confidence': confidence,
                 'success': True
             }), 200
+            
+        except ValueError as e:
+            if 'idf' in str(e).lower() or 'vectorizer' in str(e).lower():
+                logger.error(f"✗ CRITICAL: Vectorizer not fitted error: {e}")
+                return jsonify({'error': 'Model vectorizer error. Model may be corrupted. Please retrain.', 'success': False}), 503
+            else:
+                logger.error(f"✗ Prediction value error: {e}")
+                return jsonify({'error': f'Prediction failed: {str(e)}', 'success': False}), 500
+        
         except Exception as e:
             logger.error(f"✗ Model prediction error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return jsonify({'error': f'Prediction failed: {str(e)}', 'success': False}), 500
     
     except Exception as e:
         logger.error(f"✗ Prediction endpoint error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return jsonify({'error': f'Prediction failed: {str(e)}', 'success': False}), 500
 
 @app.route('/api/health', methods=['GET'])
