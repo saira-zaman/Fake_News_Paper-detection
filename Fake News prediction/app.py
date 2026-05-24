@@ -7,25 +7,40 @@ from nltk.corpus import stopwords
 import os
 import logging
 from pathlib import Path
+import tempfile
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Set NLTK data path to writable location
+nltk_data_path = os.path.join(tempfile.gettempdir(), 'nltk_data')
+if not os.path.exists(nltk_data_path):
+    os.makedirs(nltk_data_path, exist_ok=True)
+nltk.data.path.append(nltk_data_path)
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 CORS(app)
 
 # Model cache
 model_cache = None
+stopwords_cache = None
 MODEL_PATH = 'fake_news_model.pkl'
 
 # Ensure NLTK data is available
 def ensure_nltk_data():
+    global stopwords_cache
     try:
+        # Try to find existing stopwords
         nltk.data.find('corpora/stopwords')
+        stopwords_cache = stopwords.words('english')
+        logger.info("✓ Stopwords loaded from cache")
     except LookupError:
         try:
-            nltk.download('stopwords', quiet=True)
+            # Try to download to temp directory
+            nltk.download('stopwords', download_dir=nltk_data_path, quiet=True)
+            stopwords_cache = stopwords.words('english')
+            logger.info("✓ Stopwords downloaded successfully")
         except Exception as e:
             logger.warning(f"NLTK download failed: {e}")
 
@@ -72,10 +87,13 @@ def preprocess_text(text):
         
         # Remove stopwords
         try:
-            stop = stopwords.words('english')
-        except LookupError:
-            nltk.download('stopwords', quiet=True)
-            stop = stopwords.words('english')
+            if stopwords_cache is not None:
+                stop = stopwords_cache
+            else:
+                stop = stopwords.words('english')
+        except:
+            # Fallback: if stopwords not available, just continue without removing them
+            stop = []
         
         text = ' '.join([word for word in text.split() if word not in stop])
         return text
@@ -142,7 +160,10 @@ def predict():
     
     except Exception as e:
         logger.error(f"Prediction error: {e}")
-        return jsonify({'error': f'Prediction failed: {str(e)}', 'success': False}), 500
+        error_msg = str(e)
+        if 'Read-only file system' in error_msg or 'Errno 30' in error_msg:
+            return jsonify({'error': 'Server initialization in progress. Please try again.', 'success': False}), 503
+        return jsonify({'error': f'Prediction failed: {error_msg}', 'success': False}), 500
 
 @app.route('/api/health', methods=['GET'])
 def health():
@@ -161,6 +182,12 @@ def not_found(error):
 def internal_error(error):
     logger.error(f"Internal error: {error}")
     return jsonify({'error': 'Internal server error'}), 500
+
+# Initialize NLTK data on app startup
+try:
+    ensure_nltk_data()
+except Exception as e:
+    logger.warning(f"Could not pre-initialize NLTK: {e}")
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
