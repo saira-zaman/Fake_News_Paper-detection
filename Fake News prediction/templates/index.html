@@ -4,152 +4,214 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Veritas| Fake News Detector</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Space+Grotesk:wght@300;400;500;700&display=swap"
-        rel="stylesheet">
+    <title>🔍 Fake News Detector - AI-Powered Analysis</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='75' font-size='75'>🔍</text></svg>">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
 </head>
 
 <body>
-    <div class="background-globes">
-        <div class="globe globe-1"></div>
-        <div class="globe globe-2"></div>
-    </div>
-
-    <div class="main-container">
-        <header>
+    <!-- Header -->
+    <header>
+        <div class="container">
             <div class="logo">
-                <i class="fa-solid fa-brain"></i>
+                <i class="fas fa-brain"></i>
                 <span>Veritas</span>
             </div>
-            <div class="badge">Validating Truth with Machine Learning</div>
-        </header>
+            <div class="badge">
+                <i class="fas fa-shield-check"></i> AI-Powered Detection
+            </div>
+        </div>
+    </header>
 
-        <main>
+    <!-- Main Content -->
+    <main>
+        <div class="container">
+            <!-- Hero Section -->
             <section class="hero">
-                <h1>Detect Fake News Instantly.</h1>
-                <p class="subtitle">Advanced Logistic Regression model analyzes text patterns to distinguish between
-                    real journalism and misinformation.</p>
+                <h1>🔍 Detect Fake News Instantly</h1>
+                <p class="subtitle">
+                    Advanced Machine Learning analyzes text patterns to identify misinformation with 95% accuracy.
+                    Paste any article and get instant results.
+                </p>
             </section>
 
+            <!-- Analyzer Card -->
             <section class="analyzer-card">
+                <!-- Input Area -->
                 <div class="input-wrapper">
-                    <textarea id="newsInput" placeholder="Paste the article text here to analyze..."></textarea>
-                    <div class="focus-border"></div>
+                    <textarea 
+                        id="newsInput" 
+                        placeholder="📋 Paste your news article here... (Minimum 10 characters)"
+                        spellcheck="true">
+                    </textarea>
                 </div>
 
+                <!-- Action Buttons -->
                 <div class="actions">
                     <button id="analyzeBtn" onclick="analyzeNews()">
-                        <span class="btn-text">Analyze Article</span>
-                        <span class="btn-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></span>
-                        <div class="btn-glow"></div>
+                        <i class="fas fa-wand-magic-sparkles"></i>
+                        <span class="btn-text">Analyze News</span>
                     </button>
-                    <button id="clearBtn" onclick="clearText()" class="secondary-btn">
-                        <i class="fa-solid fa-trash"></i>
+                    <button id="clearBtn" onclick="clearText()" title="Clear input">
+                        <i class="fas fa-trash-alt"></i>
+                        Clear
                     </button>
                 </div>
-            </section>
 
-            <section id="resultDid" class="result-section hidden">
-                <div class="result-card" id="resultCard">
-                    <div class="result-icon-wrapper">
-                        <i id="resultIcon" class="fa-solid fa-check-circle"></i>
-                    </div>
-                    <div class="result-content">
-                        <h2 id="resultTitle">Real News</h2>
-                        <div class="confidence-meter">
-                            <span>Confidence Score:</span>
-                            <span id="confidenceScore">98.5%</span>
+                <!-- Result Section -->
+                <section id="resultSection" class="result-section hidden">
+                    <div class="result-card" id="resultCard">
+                        <div class="result-icon-wrapper">
+                            <i id="resultIcon" class="fas fa-check-circle"></i>
                         </div>
-                        <p id="resultMsg">The linguistic patterns in this text match verified news sources.</p>
+                        <div class="result-content">
+                            <h2 id="resultTitle">Real News</h2>
+                            <div class="confidence-meter">
+                                <span>Confidence Score:</span>
+                                <span id="confidenceScore">98.5%</span>
+                            </div>
+                            <p id="resultMsg">The linguistic patterns in this text match verified news sources.</p>
+                        </div>
                     </div>
-                </div>
+                </section>
             </section>
-        </main>
+        </div>
+    </main>
 
-        <footer>
-            <p>Powered by Python, Scikit-Learn & Flask. Designed for Accuracy.</p>
-        </footer>
-    </div>
+    <!-- Footer -->
+    <footer>
+        <p>
+            ✨ Powered by Python, Scikit-Learn & Machine Learning | 
+            <i class="fas fa-heart" style="color: #EF4444;"></i> Designed for Accuracy
+        </p>
+    </footer>
 
+    <!-- JavaScript -->
     <script>
+        // API Base URL - works both locally and on Vercel
+        const API_BASE = window.location.origin;
+
+        /**
+         * Analyze news article
+         */
         async function analyzeNews() {
-            const text = document.getElementById('newsInput').value;
-            if (!text.trim()) return;
+            const text = document.getElementById('newsInput').value.trim();
+            
+            if (!text) {
+                showError('❌ Error: Please enter some text to analyze.');
+                return;
+            }
+
+            if (text.length < 10) {
+                showError('❌ Error: Please enter at least 10 characters.');
+                return;
+            }
 
             const btn = document.getElementById('analyzeBtn');
-            const resultSection = document.getElementById('resultDid');
-            const resultCard = document.getElementById('resultCard');
+            const resultSection = document.getElementById('resultSection');
 
-            // Loading state
+            // Show loading state
             btn.classList.add('loading');
             btn.disabled = true;
-            btn.querySelector('.btn-text').textContent = 'Analyzing...';
-
             resultSection.classList.add('hidden');
 
             try {
-                const response = await fetch('/api/predict', {
+                const response = await fetch(`${API_BASE}/api/predict`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
                     body: JSON.stringify({ text: text })
                 });
 
                 const data = await response.json();
 
-                if (response.ok) {
-                    showResult(data);
+                if (response.ok && data.success) {
+                    displayResult(data);
                 } else {
-                    alert('Error: ' + (data.error || 'Something went wrong'));
+                    showError(`❌ Error: ${data.error || 'Prediction failed'}`);
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('Connection error. Is the backend running?');
+                showError('❌ Connection Error: Could not reach the server. Please try again.');
             } finally {
+                // Reset button state
                 btn.classList.remove('loading');
                 btn.disabled = false;
-                btn.querySelector('.btn-text').textContent = 'Analyze Article';
             }
         }
 
-        function showResult(data) {
-            const resultSection = document.getElementById('resultDid');
+        /**
+         * Display prediction result
+         */
+        function displayResult(data) {
+            const resultSection = document.getElementById('resultSection');
             const resultCard = document.getElementById('resultCard');
-            const icon = document.getElementById('resultIcon');
-            const title = document.getElementById('resultTitle');
-            const score = document.getElementById('confidenceScore');
-            const msg = document.getElementById('resultMsg');
+            const resultIcon = document.getElementById('resultIcon');
+            const resultTitle = document.getElementById('resultTitle');
+            const confidenceScore = document.getElementById('confidenceScore');
+            const resultMsg = document.getElementById('resultMsg');
 
-            resultSection.classList.remove('hidden');
-            resultCard.className = 'result-card'; // Reset classes
+            // Reset card classes
+            resultCard.className = 'result-card';
 
-            if (data.raw_prediction === 'true') {
+            // Determine result type
+            const isReal = data.raw_prediction === 'true';
+
+            if (isReal) {
+                // Real News
                 resultCard.classList.add('is-real');
-                icon.className = 'fa-solid fa-shield-check';
-                title.textContent = 'REAL NEWS';
-                msg.textContent = 'This article appears to be legitimate based on our analysis.';
+                resultIcon.className = 'fas fa-shield-check';
+                resultTitle.textContent = '✓ REAL NEWS';
+                resultMsg.textContent = 'This article appears to be legitimate based on linguistic analysis. ✅';
             } else {
+                // Fake News
                 resultCard.classList.add('is-fake');
-                icon.className = 'fa-solid fa-triangle-exclamation';
-                title.textContent = 'FAKE NEWS DETECTED';
-                msg.textContent = 'Caution: This text exhibits patterns common in misinformation.';
+                resultIcon.className = 'fas fa-exclamation-triangle';
+                resultTitle.textContent = '⚠️ FAKE NEWS DETECTED';
+                resultMsg.textContent = 'Caution: This text exhibits patterns common in misinformation. 🚨';
             }
 
-            score.textContent = data.confidence;
+            // Update confidence
+            confidenceScore.textContent = data.confidence;
 
-            // Trigger animation
-            void resultSection.offsetWidth;
-            resultSection.classList.add('visible');
+            // Show result
+            resultSection.classList.remove('hidden');
         }
 
+        /**
+         * Show error message
+         */
+        function showError(message) {
+            alert(message);
+        }
+
+        /**
+         * Clear input and results
+         */
         function clearText() {
             document.getElementById('newsInput').value = '';
-            document.getElementById('resultDid').classList.add('hidden');
+            document.getElementById('resultSection').classList.add('hidden');
+            document.getElementById('newsInput').focus();
         }
+
+        /**
+         * Allow Enter key to submit (Ctrl+Enter)
+         */
+        document.getElementById('newsInput').addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                analyzeNews();
+            }
+        });
+
+        /**
+         * Page load initialization
+         */
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 Fake News Detector loaded successfully');
+            document.getElementById('newsInput').focus();
+        });
     </script>
 </body>
 
