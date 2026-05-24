@@ -98,6 +98,30 @@ __pypackages__/
 celerybeat-schedule
 celerybeat.pid
 
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+credentials/
+secrets/
+
+# Model files and large binaries
+*.pkl
+*.pickle
+*.h5
+*.joblib
+
+# IDE and OS files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data files (if needed, add specific patterns)
+*.zip
+*.rar
+
 # SageMath parsed files
 *.sage.py
 
