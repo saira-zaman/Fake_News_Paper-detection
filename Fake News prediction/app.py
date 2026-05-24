@@ -1,81 +1,164 @@
 from flask import Flask, render_template, request, jsonify
+from flask_cors import CORS
 import joblib
-import pandas as pd
 import string
 import nltk
 from nltk.corpus import stopwords
 import os
+import logging
+from pathlib import Path
 
-app = Flask(__name__)
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Load Model
+app = Flask(__name__, template_folder='templates', static_folder='static')
+CORS(app)
+
+# Model cache
+model_cache = None
 MODEL_PATH = 'fake_news_model.pkl'
 
-def preprocess_text(text):
-    # Lowercase
-    text = str(text).lower()
-    
-    # Remove punctuation
-    diff = [char for char in text if char not in string.punctuation]
-    text = ''.join(diff)
-    
-    # Remove stopwords
-    # Check if stopwords are downloaded
+# Ensure NLTK data is available
+def ensure_nltk_data():
     try:
-        stop = stopwords.words('english')
+        nltk.data.find('corpora/stopwords')
     except LookupError:
-        nltk.download('stopwords')
-        stop = stopwords.words('english')
+        try:
+            nltk.download('stopwords', quiet=True)
+        except Exception as e:
+            logger.warning(f"NLTK download failed: {e}")
 
-    text = ' '.join([word for word in text.split() if word not in stop])
+ensure_nltk_data()
+
+def load_model():
+    """Load model with caching"""
+    global model_cache
+    if model_cache is not None:
+        return model_cache
     
-    return text
+    try:
+        # Try current directory
+        if os.path.exists(MODEL_PATH):
+            model_cache = joblib.load(MODEL_PATH)
+            logger.info("Model loaded successfully")
+            return model_cache
+        
+        # Try relative to script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(script_dir, MODEL_PATH)
+        if os.path.exists(model_path):
+            model_cache = joblib.load(model_path)
+            logger.info("Model loaded from script directory")
+            return model_cache
+        
+        logger.warning("Model file not found")
+        return None
+    except Exception as e:
+        logger.error(f"Error loading model: {e}")
+        return None
+
+def preprocess_text(text):
+    """Preprocess text with error handling"""
+    try:
+        # Lowercase
+        text = str(text).lower()
+        
+        # Remove punctuation
+        diff = [char for char in text if char not in string.punctuation]
+        text = ''.join(diff)
+        
+        # Remove stopwords
+        try:
+            stop = stopwords.words('english')
+        except LookupError:
+            nltk.download('stopwords', quiet=True)
+            stop = stopwords.words('english')
+        
+        text = ' '.join([word for word in text.split() if word not in stop])
+        return text
+    except Exception as e:
+        logger.error(f"Preprocessing error: {e}")
+        raise
 
 @app.route('/')
 def home():
-    return render_template('index.html')
+    """Serve home page"""
+    try:
+        return render_template('index.html')
+    except Exception as e:
+        logger.error(f"Home route error: {e}")
+        return jsonify({'error': 'Page not found'}), 404
 
-@app.route('/predict', methods=['POST'])
+@app.route('/api/predict', methods=['POST'])
 def predict():
+    """API endpoint for predictions"""
     try:
         data = request.get_json()
-        text = data.get('text', '')
+        if not data:
+            return jsonify({'error': 'Invalid request'}), 400
+        
+        text = data.get('text', '').strip()
         
         if not text:
             return jsonify({'error': 'No text provided'}), 400
-
-        if not os.path.exists(MODEL_PATH):
-            return jsonify({'error': 'Model not trained yet. Please run train_model.py'}), 503
-
-        # Load model lazily to allow training to happen while app starts (though ideally model exists)
-        model = joblib.load(MODEL_PATH)
         
+        if len(text) < 10:
+            return jsonify({'error': 'Text too short. Please provide at least 10 characters'}), 400
+        
+        # Load model
+        model = load_model()
+        if model is None:
+            return jsonify({'error': 'Model not available. Please try again later'}), 503
+        
+        # Preprocess
         processed_text = preprocess_text(text)
+        
+        if not processed_text:
+            return jsonify({'error': 'Text could not be processed'}), 400
+        
+        # Predict
         prediction = model.predict([processed_text])[0]
         
-        result = "REAL" if prediction == 'true' else "FAKE" # Adjusting based on train_model.py: true['target'] = 'true'
-        # wait, train_model.py says: true['target'] = 'true', fake['target'] = 'fake'
-        # prediction will be 'fake' or 'true' string.
-        
-        result_display = "REAL NEWS" if prediction == 'true' else "FAKE NEWS"
-        confidence = "High" # Placeholder as LogisticRegression default predict doesn't give proba without predict_proba
-        
-        # Try to get probability if possible
+        # Get probabilities
         try:
             proba = model.predict_proba([processed_text])[0]
             confidence_score = max(proba) * 100
             confidence = f"{confidence_score:.1f}%"
         except:
             confidence = "N/A"
-
+        
+        # Determine result
+        result_display = "🟢 REAL NEWS" if prediction == 'true' else "🔴 FAKE NEWS"
+        
         return jsonify({
             'result': result_display,
             'raw_prediction': prediction,
-            'confidence': confidence
-        })
-
+            'confidence': confidence,
+            'success': True
+        }), 200
+    
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f"Prediction error: {e}")
+        return jsonify({'error': f'Prediction failed: {str(e)}', 'success': False}), 500
+
+@app.route('/api/health', methods=['GET'])
+def health():
+    """Health check endpoint"""
+    model = load_model()
+    return jsonify({
+        'status': 'healthy',
+        'model_loaded': model is not None
+    }), 200
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Endpoint not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f"Internal error: {error}")
+    return jsonify({'error': 'Internal server error'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
