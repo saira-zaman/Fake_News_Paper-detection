@@ -91,52 +91,77 @@
     <script>
         // API Base URL - works both locally and on Vercel
         const API_BASE = window.location.origin;
+        let requestInProgress = false;
 
         /**
-         * Analyze news article
+         * Analyze news article with comprehensive error handling
          */
         async function analyzeNews() {
+            if (requestInProgress) return;
+            
             const text = document.getElementById('newsInput').value.trim();
             
             if (!text) {
-                showError('❌ Error: Please enter some text to analyze.');
+                showError('Please enter some text to analyze.');
                 return;
             }
 
             if (text.length < 10) {
-                showError('❌ Error: Please enter at least 10 characters.');
+                showError('Please enter at least 10 characters.');
                 return;
             }
 
             const btn = document.getElementById('analyzeBtn');
             const resultSection = document.getElementById('resultSection');
 
-            // Show loading state
+            requestInProgress = true;
             btn.classList.add('loading');
             btn.disabled = true;
             resultSection.classList.add('hidden');
 
             try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 sec timeout
+
                 const response = await fetch(`${API_BASE}/api/predict`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ text: text })
+                    body: JSON.stringify({ text: text }),
+                    signal: controller.signal
                 });
+
+                clearTimeout(timeoutId);
+
+                // Handle different status codes
+                if (response.status === 503) {
+                    showError('Server is initializing. Please wait a moment and try again.');
+                    return;
+                }
 
                 const data = await response.json();
 
                 if (response.ok && data.success) {
                     displayResult(data);
+                } else if (response.status === 400) {
+                    showError(data.error || 'Invalid input provided.');
+                } else if (response.status === 500) {
+                    showError(data.error || 'Server error. Please try again later.');
                 } else {
-                    showError(`❌ Error: ${data.error || 'Prediction failed'}`);
+                    showError(data.error || 'Analysis failed. Please try again.');
                 }
             } catch (error) {
-                console.error('Error:', error);
-                showError('❌ Connection Error: Could not reach the server. Please try again.');
+                if (error.name === 'AbortError') {
+                    showError('Request timed out. Please try again.');
+                } else if (!navigator.onLine) {
+                    showError('Connection lost. Please check your internet.');
+                } else {
+                    console.error('Error:', error);
+                    showError('Connection error. Please try again.');
+                }
             } finally {
-                // Reset button state
+                requestInProgress = false;
                 btn.classList.remove('loading');
                 btn.disabled = false;
             }
@@ -160,31 +185,32 @@
             const isReal = data.raw_prediction === 'true';
 
             if (isReal) {
-                // Real News
                 resultCard.classList.add('is-real');
                 resultIcon.className = 'fas fa-shield-check';
-                resultTitle.textContent = '✓ REAL NEWS';
-                resultMsg.textContent = 'This article appears to be legitimate based on linguistic analysis. ✅';
+                resultTitle.textContent = 'REAL NEWS';
+                resultMsg.textContent = 'This article appears to be legitimate based on linguistic analysis.';
             } else {
-                // Fake News
                 resultCard.classList.add('is-fake');
                 resultIcon.className = 'fas fa-exclamation-triangle';
-                resultTitle.textContent = '⚠️ FAKE NEWS DETECTED';
-                resultMsg.textContent = 'Caution: This text exhibits patterns common in misinformation. 🚨';
+                resultTitle.textContent = 'FAKE NEWS DETECTED';
+                resultMsg.textContent = 'Caution: This text exhibits patterns common in misinformation.';
             }
 
             // Update confidence
             confidenceScore.textContent = data.confidence;
 
-            // Show result
+            // Show result with animation
             resultSection.classList.remove('hidden');
+            setTimeout(() => resultSection.classList.add('visible'), 10);
         }
 
         /**
-         * Show error message
+         * Show error message with better UX
          */
         function showError(message) {
-            alert(message);
+            // Use native alert with better formatting
+            const title = 'Analysis Failed';
+            alert(`${title}\n\n${message}`);
         }
 
         /**
@@ -197,7 +223,7 @@
         }
 
         /**
-         * Allow Enter key to submit (Ctrl+Enter)
+         * Keyboard shortcuts
          */
         document.getElementById('newsInput').addEventListener('keydown', function(e) {
             if (e.ctrlKey && e.key === 'Enter') {
@@ -209,8 +235,24 @@
          * Page load initialization
          */
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('🚀 Fake News Detector loaded successfully');
+            console.log('Fake News Detector loaded');
             document.getElementById('newsInput').focus();
+            
+            // Check if API is accessible
+            fetch(`${API_BASE}/api/health`)
+                .then(r => r.json())
+                .then(d => console.log('API Status:', d))
+                .catch(e => console.warn('API not ready yet'));
+        });
+
+        /**
+         * Warn before leaving if text is entered
+         */
+        window.addEventListener('beforeunload', function(e) {
+            if (document.getElementById('newsInput').value.trim()) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
         });
     </script>
 </body>
