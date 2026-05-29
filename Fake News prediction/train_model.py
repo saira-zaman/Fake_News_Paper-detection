@@ -4,7 +4,6 @@ import nltk
 from nltk.corpus import stopwords
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
-from sklearn.linear_model import PassiveAggressiveClassifier
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -115,10 +114,10 @@ def train_model():
             strip_accents='unicode',
             max_features=5000
         )),
-        ('model', PassiveAggressiveClassifier(
-            max_iter=50,
+        ('model', LogisticRegression(
+            max_iter=200,
             random_state=42,
-            n_jobs=-1
+            solver='lbfgs'
         ))
     ])
     

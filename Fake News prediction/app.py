@@ -53,13 +53,14 @@ def load_model():
                     model = joblib.load(path)
                     logger.info(f"✓ Model loaded from: {path}")
                     
-                    # Validate model is properly fitted by checking it has the required attributes
-                    if hasattr(model, 'predict') and hasattr(model, 'predict_proba'):
-                        logger.info(f"✓ Model validation successful - has predict and predict_proba methods")
+                    # Validate model is properly fitted by checking it can predict
+                    try:
+                        test_pred = model.predict(['test'])
+                        logger.info(f"✓ Model validation successful - test prediction: {test_pred}")
                         model_cache = model
                         return model_cache
-                    else:
-                        logger.error(f"✗ Model loaded from {path} but is missing required methods")
+                    except Exception as validation_err:
+                        logger.error(f"✗ Model loaded from {path} but validation failed: {validation_err}")
             except Exception as e:
                 logger.debug(f"  Could not load from {path}: {e}")
         
