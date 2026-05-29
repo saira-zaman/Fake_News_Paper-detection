@@ -38,13 +38,36 @@
 
             <!-- Analyzer Card -->
             <section class="analyzer-card">
-                <!-- Input Area -->
-                <div class="input-wrapper">
-                    <textarea 
-                        id="newsInput" 
-                        placeholder="📋 Paste your news article here... (Minimum 10 characters)"
-                        spellcheck="true">
-                    </textarea>
+                <!-- Tab Selector -->
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="switchTab('text')">
+                        <i class="fas fa-keyboard"></i> Paste Text
+                    </button>
+                    <button class="tab-btn" onclick="switchTab('file')">
+                        <i class="fas fa-file-upload"></i> Upload File
+                    </button>
+                </div>
+
+                <!-- Text Input Tab -->
+                <div id="textTab" class="tab-content active">
+                    <div class="input-wrapper">
+                        <textarea 
+                            id="newsInput" 
+                            placeholder="📋 Paste your news article here... (Minimum 10 characters)"
+                            spellcheck="true">
+                        </textarea>
+                    </div>
+                </div>
+
+                <!-- File Upload Tab -->
+                <div id="fileTab" class="tab-content">
+                    <div class="file-upload-area" id="fileUploadArea" onclick="document.getElementById('fileInput').click()">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <p>Click to upload or drag and drop</p>
+                        <p class="file-formats">Supported: TXT, PDF, DOCX</p>
+                        <input type="file" id="fileInput" style="display:none;" accept=".txt,.pdf,.docx" onchange="handleFileSelect(event)">
+                        <p id="fileName" style="margin-top: 10px; color: #666;"></p>
+                    </div>
                 </div>
 
                 <!-- Action Buttons -->
@@ -218,12 +241,122 @@
          */
         function clearText() {
             document.getElementById('newsInput').value = '';
+            document.getElementById('fileInput').value = '';
+            document.getElementById('fileName').textContent = '';
             document.getElementById('resultSection').classList.add('hidden');
             document.getElementById('newsInput').focus();
         }
 
         /**
-         * Keyboard shortcuts
+         * Switch between text and file tabs
+         */
+        function switchTab(tab) {
+            // Update tabs
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Update content
+            document.getElementById('textTab').classList.remove('active');
+            document.getElementById('fileTab').classList.remove('active');
+
+            if (tab === 'text') {
+                document.getElementById('textTab').classList.add('active');
+                document.getElementById('newsInput').focus();
+            } else {
+                document.getElementById('fileTab').classList.add('active');
+            }
+        }
+
+        /**
+         * Handle file selection
+         */
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const fileName = document.getElementById('fileName');
+            const fileUploadArea = document.getElementById('fileUploadArea');
+            
+            // Check file size (max 5MB)
+            if (file.size > 5 * 1024 * 1024) {
+                showError('File size must be less than 5MB');
+                return;
+            }
+
+            // Check file type
+            const allowedTypes = ['text/plain', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+            if (!allowedTypes.includes(file.type) && !file.name.endsWith('.txt') && !file.name.endsWith('.pdf') && !file.name.endsWith('.docx')) {
+                showError('Only TXT, PDF, and DOCX files are supported');
+                return;
+            }
+
+            fileName.textContent = `✓ Selected: ${file.name}`;
+            fileUploadArea.style.borderColor = '#4CAF50';
+
+            // Read file
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                // Store in textarea for analysis
+                document.getElementById('newsInput').value = text;
+                
+                // Show text tab with content
+                document.querySelector('.tab-btn:first-child').click();
+            };
+            reader.onerror = function() {
+                showError('Failed to read file');
+                fileName.textContent = '';
+                fileUploadArea.style.borderColor = '';
+            };
+
+            // Read based on file type
+            if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+                // For PDF, send to server for extraction
+                extractTextFromServer(file, fileName, fileUploadArea);
+            } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.endsWith('.docx')) {
+                // For DOCX, extract text via server
+                extractTextFromServer(file, fileName, fileUploadArea);
+            } else {
+                // For TXT
+                reader.readAsText(file);
+            }
+        }
+
+        /**
+         * Extract text from file via server (handles DOCX and PDF)
+         */
+        function extractTextFromServer(file, fileName, fileUploadArea) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch(`${API_BASE}/api/extract-text`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('newsInput').value = data.text;
+                    fileName.textContent = `✓ Extracted: ${file.name}`;
+                    fileUploadArea.style.borderColor = '#4CAF50';
+                    // Switch to text tab
+                    document.querySelector('.tab-btn:first-child').click();
+                } else {
+                    showError(data.error || 'Failed to extract text from file');
+                    fileName.textContent = '';
+                    fileUploadArea.style.borderColor = '';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showError('Failed to process file');
+                fileName.textContent = '';
+                fileUploadArea.style.borderColor = '';
+            });
+        }
+
+        /**
+         * Drag and drop support
          */
         document.getElementById('newsInput').addEventListener('keydown', function(e) {
             if (e.ctrlKey && e.key === 'Enter') {

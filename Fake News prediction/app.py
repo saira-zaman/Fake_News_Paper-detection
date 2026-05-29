@@ -4,6 +4,7 @@ import joblib
 import os
 import logging
 import sys
+import io
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -159,6 +160,88 @@ def predict():
         import traceback
         logger.error(traceback.format_exc())
         return jsonify({'error': f'Prediction failed: {str(e)}', 'success': False}), 500
+
+
+@app.route('/api/extract-text', methods=['POST'])
+def extract_text():
+    """Extract text from uploaded file (txt, pdf, docx). Returns JSON {success, text}.
+    The client uses this to upload DOCX/PDF and get extracted text for analysis.
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+
+        f = request.files['file']
+        filename = f.filename or ''
+        if not filename:
+            return jsonify({'success': False, 'error': 'Invalid file name'}), 400
+
+        ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+
+        # Limit file size server-side (optional) - reject > 10MB
+        try:
+            f.stream.seek(0, io.SEEK_END)
+            size = f.stream.tell()
+            f.stream.seek(0)
+            if size > 10 * 1024 * 1024:
+                return jsonify({'success': False, 'error': 'File too large (max 10MB)'}), 400
+        except Exception:
+            # If seeking fails, continue and rely on client-side check
+            pass
+
+        text = ''
+        # TXT
+        if ext in ('txt', 'text'):
+            data = f.read()
+            try:
+                text = data.decode('utf-8')
+            except Exception:
+                text = data.decode('latin-1', errors='ignore')
+
+        # DOCX
+        elif ext == 'docx':
+            try:
+                from docx import Document
+                f.stream.seek(0)
+                doc = Document(f.stream)
+                paras = [p.text for p in doc.paragraphs if p.text]
+                text = '\n'.join(paras)
+            except Exception as e:
+                logger.error(f"DOCX extraction error: {e}")
+                return jsonify({'success': False, 'error': 'Failed to extract text from DOCX'}), 500
+
+        # PDF
+        elif ext == 'pdf':
+            try:
+                from PyPDF2 import PdfReader
+                f.stream.seek(0)
+                reader = PdfReader(f.stream)
+                pages = []
+                for page in reader.pages:
+                    try:
+                        ptext = page.extract_text()
+                        if ptext:
+                            pages.append(ptext)
+                    except Exception:
+                        continue
+                text = '\n'.join(pages)
+            except Exception as e:
+                logger.error(f"PDF extraction error: {e}")
+                return jsonify({'success': False, 'error': 'Failed to extract text from PDF'}), 500
+
+        else:
+            return jsonify({'success': False, 'error': 'Unsupported file type'}), 400
+
+        if not text or text.strip() == '':
+            return jsonify({'success': False, 'error': 'No text extracted from file'}), 400
+
+        return jsonify({'success': True, 'text': text}), 200
+
+    except Exception as e:
+        logger.error(f"✗ Extract-text endpoint error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({'success': False, 'error': 'Internal server error'}), 500
 
 @app.route('/api/health', methods=['GET'])
 def health():

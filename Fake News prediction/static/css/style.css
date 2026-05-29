@@ -208,6 +208,94 @@ main {
 }
 
 /* ============================================================
+   TABS
+   ============================================================ */
+
+.tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 25px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 12px 20px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.tab-btn:hover {
+    color: var(--accent-light);
+}
+
+.tab-btn.active {
+    color: var(--accent-color);
+    border-bottom-color: var(--accent-color);
+}
+
+.tab-content {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* ============================================================
+   FILE UPLOAD AREA
+   ============================================================ */
+
+.file-upload-area {
+    width: 100%;
+    min-height: 250px;
+    padding: 40px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 2px dashed var(--border-color);
+    border-radius: 12px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    text-align: center;
+}
+
+.file-upload-area:hover {
+    border-color: var(--accent-color);
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.file-upload-area i {
+    font-size: 48px;
+    color: var(--accent-light);
+    margin-bottom: 15px;
+}
+
+.file-upload-area p {
+    color: var(--text-light);
+    margin: 5px 0;
+}
+
+.file-formats {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 8px;
+}
+
+/* ============================================================
    INPUT AREA
    ============================================================ */
 
