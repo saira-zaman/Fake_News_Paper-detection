@@ -7,13 +7,14 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.linear_model import PassiveAggressiveClassifier
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 import joblib
 import os
 
 # Download stopwords if not present
-nltk.download('stopwords')
+nltk.download('stopwords', quiet=True)
 
 def load_data():
     print("Loading data...")
@@ -66,36 +67,25 @@ def load_data():
     return data
 
 def preprocess_data(data):
-    print("Preprocessing...")
+    """Minimal preprocessing - just combine title and text, remove unnecessary columns"""
+    print("Preprocessing data...")
     from sklearn.utils import shuffle
     data = shuffle(data)
     data = data.reset_index(drop=True)
     
     # Merge title and text if title exists
     if 'title' in data.columns:
-        print("Merging Title and Text...")
+        print("  Merging Title and Text...")
         data['text'] = data['title'].fillna('') + " " + data['text'].fillna('')
 
     # Drop irrelevant columns if they exist
     for col in ["title", "subject", "date"]:
         if col in data.columns:
             data.drop([col], axis=1, inplace=True)
-            
-    # Text cleaning
-    data['text'] = data['text'].apply(lambda x: str(x).lower())
     
-    def punctuation_removal(text):
-        all_list = [char for char in text if char not in string.punctuation]
-        clean_str = ''.join(all_list)
-        return clean_str
-
-    data['text'] = data['text'].apply(punctuation_removal)
-    
-    # Stopwords removal
-    stop = stopwords.words('english')
-    # Using a faster way to remove stopwords might be better for large datasets but let's stick to notebook logic 
-    # to maintain consistency, although the lambda with split/join is slow.
-    data['text'] = data['text'].apply(lambda x: ' '.join([word for word in x.split() if word not in stop]))
+    # IMPORTANT: Don't manually preprocess text - let TfidfVectorizer handle it
+    # This ensures consistency between training and prediction
+    print("  Preprocessing complete (TF-IDF vectorizer will handle text cleaning)")
     
     return data
 
@@ -109,25 +99,49 @@ def train_model():
     print("Training model...")
     X_train, X_test, y_train, y_test = train_test_split(data['text'], data.target, test_size=0.2, random_state=42)
     
-    # Pipeline with N-gams for style detection
+    # Pipeline with TF-IDF Vectorizer for preprocessing and style detection
     # min_df=5 removes rare words (like specific names not seen often) to reduce overfitting to specific events
     # ngram_range=(1, 3) captures phrases "official sources said", "death toll", etc.
-    from sklearn.feature_extraction.text import TfidfVectorizer
+    # lowercase=True ensures consistent lowercasing
+    # strip_accents='unicode' handles special characters
     
     pipe = Pipeline([
-        ('tfidf', TfidfVectorizer(ngram_range=(1, 3), min_df=5, max_df=0.9)),
-        ('model', PassiveAggressiveClassifier(max_iter=50))
+        ('tfidf', TfidfVectorizer(
+            ngram_range=(1, 3),
+            min_df=5,
+            max_df=0.9,
+            lowercase=True,
+            stop_words='english',
+            strip_accents='unicode',
+            max_features=5000
+        )),
+        ('model', PassiveAggressiveClassifier(
+            max_iter=50,
+            random_state=42,
+            n_jobs=-1
+        ))
     ])
     
+    print("Fitting pipeline...")
     model = pipe.fit(X_train, y_train)
     
+    print("Evaluating model...")
     prediction = model.predict(X_test)
     acc = accuracy_score(y_test, prediction)
-    print(f"Model Accuracy: {acc*100:.2f}%")
+    print(f"✓ Model Accuracy: {acc*100:.2f}%")
     
     # Save model
     joblib.dump(model, 'fake_news_model.pkl')
-    print("Model saved as 'fake_news_model.pkl'")
+    print("✓ Model saved as 'fake_news_model.pkl'")
+    
+    # Print model info for debugging
+    print("\n" + "="*50)
+    print("MODEL PIPELINE INFO:")
+    print("="*50)
+    print(f"Pipeline steps: {pipe.named_steps.keys()}")
+    print(f"TF-IDF Vocabulary size: {len(pipe.named_steps['tfidf'].vocabulary_)}")
+    print(f"Model type: {type(pipe.named_steps['model'])}")
+    print("="*50 + "\n")
 
 if __name__ == "__main__":
     train_model()

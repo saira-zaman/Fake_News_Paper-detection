@@ -1,7 +1,6 @@
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 import joblib
-import string
 import os
 import logging
 import sys
@@ -16,37 +15,14 @@ CORS(app)
 # Model cache
 model_cache = None
 
-# Common English stopwords (hardcoded fallback)
-STOPWORDS = {
-    'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', "you're", "you've", "you'll", "you'd", 
-    'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', "she's", 'her', 'hers', 
-    'herself', 'it', "it's", 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which', 
-    'who', 'whom', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 
-    'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 
-    'don', "don't", 'should', "should've", 'now', 'd', 'll', 'm', 'o', 're', 've', 'y', 'ain', 'aren', "aren't", 
-    'couldn', "couldn't", 'didn', "didn't", 'doesn', "doesn't", 'hadn', "hadn't", 'hasn', "hasn't", 'haven', 
-    "haven't", 'isn', "isn't", 'ma', 'mightn', "mightn't", 'mustn', "mustn't", 'needn', "needn't", 'shan', 
-    "shan't", 'shouldn', "shouldn't", 'wasn', "wasn't", 'weren', "weren't", 'won', "won't", 'wouldn', "wouldn't"
-}
+# Common English stopwords (hardcoded fallback) - No longer needed since TfidfVectorizer handles preprocessing
+# Removed to reduce code complexity
 
 def load_stopwords():
-    """Load stopwords with fallback to hardcoded list"""
-    try:
-        try:
-            import nltk
-            from nltk.corpus import stopwords
-            nltk.download('stopwords', quiet=True)
-            stop = set(stopwords.words('english'))
-            logger.info("✓ NLTK stopwords loaded")
-            return stop
-        except:
-            logger.warning("⚠ Using hardcoded stopwords")
-            return STOPWORDS
-    except:
-        logger.warning("⚠ Using hardcoded stopwords")
-        return STOPWORDS
+    """Removed - TfidfVectorizer handles preprocessing internally"""
+    return set()
 
-stopwords_list = load_stopwords()
+stopwords_list = set()
 
 def load_model():
     """Load model with caching and better error handling"""
@@ -55,54 +31,56 @@ def load_model():
         return model_cache
     
     try:
-        # Try multiple paths
+        # Try multiple paths for different deployment scenarios
         possible_paths = [
             'fake_news_model.pkl',
             os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fake_news_model.pkl'),
             os.path.join(os.getcwd(), 'fake_news_model.pkl'),
             os.path.join(os.getcwd(), 'Fake News prediction', 'fake_news_model.pkl'),
-            '/vercel/path0/Fake News prediction/fake_news_model.pkl',  # Vercel path
+            '/vercel/path0/fake_news_model.pkl',  # Vercel root path
+            '/vercel/path0/Fake News prediction/fake_news_model.pkl',  # Vercel nested path
             '/tmp/fake_news_model.pkl'  # Temp fallback
         ]
         
-        for path in possible_paths:
-            if os.path.exists(path):
-                logger.info(f"✓ Loading model from: {path}")
-                model = joblib.load(path)
-                
-                # Validate model is properly fitted
-                try:
-                    # Test prediction to ensure model works
-                    test_result = model.predict(['test article'])
-                    logger.info(f"✓ Model validated with test prediction: {test_result}")
-                    model_cache = model
-                    logger.info("✓ Model loaded and cached successfully")
-                    return model_cache
-                except Exception as e:
-                    logger.error(f"✗ Model loaded but failed validation: {e}")
-                    return None
+        logger.info(f"Current working directory: {os.getcwd()}")
+        logger.info(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+        logger.info(f"Attempting to load model from {len(possible_paths)} possible locations...")
         
-        logger.error(f"✗ Model not found in any paths: {possible_paths}")
+        for path in possible_paths:
+            try:
+                if os.path.exists(path):
+                    logger.info(f"✓ Found model at: {path}")
+                    model = joblib.load(path)
+                    logger.info(f"✓ Model loaded from: {path}")
+                    
+                    # Validate model is properly fitted by checking it has the required attributes
+                    if hasattr(model, 'predict') and hasattr(model, 'predict_proba'):
+                        logger.info(f"✓ Model validation successful - has predict and predict_proba methods")
+                        model_cache = model
+                        return model_cache
+                    else:
+                        logger.error(f"✗ Model loaded from {path} but is missing required methods")
+            except Exception as e:
+                logger.debug(f"  Could not load from {path}: {e}")
+        
+        logger.error(f"✗ Model not found in any of these locations:")
+        for path in possible_paths:
+            logger.error(f"  - {path}")
         return None
     except Exception as e:
         logger.error(f"✗ Error loading model: {e}")
         import traceback
-        traceback.print_exc()
+        logger.error(traceback.format_exc())
         return None
 
 def preprocess_text(text):
-    """Preprocess text - lowercase, remove punctuation, remove stopwords"""
+    """Return text as-is - TfidfVectorizer handles preprocessing"""
     try:
-        # Lowercase
-        text = str(text).lower()
-        
-        # Remove punctuation
-        text = ''.join([char for char in text if char not in string.punctuation])
-        
-        # Remove stopwords
-        text = ' '.join([word for word in text.split() if word not in stopwords_list])
-        
-        return text.strip()
+        # Just trim whitespace - let the pipeline handle vectorization
+        text = str(text).strip()
+        if not text:
+            raise ValueError("Text is empty after cleaning")
+        return text
     except Exception as e:
         logger.error(f"✗ Preprocessing error: {e}")
         raise
@@ -141,34 +119,23 @@ def predict():
             logger.error("✗ Model not loaded")
             return jsonify({'error': 'Model initialization failed. Please contact support.', 'success': False}), 503
         
-        # Preprocess
+        # Predict (model pipeline handles preprocessing internally)
         try:
-            processed_text = preprocess_text(text)
-        except Exception as e:
-            logger.error(f"✗ Text preprocessing failed: {e}")
-            return jsonify({'error': 'Text could not be processed', 'success': False}), 400
-        
-        if not processed_text:
-            logger.error("✗ Preprocessed text is empty")
-            return jsonify({'error': 'Text could not be processed', 'success': False}), 400
-        
-        # Predict
-        try:
-            # This is where the error occurs - if vectorizer is not fitted
-            logger.info(f"✓ Attempting prediction on text: {processed_text[:50]}...")
-            prediction = model.predict([processed_text])[0]
+            logger.info(f"✓ Attempting prediction on text: {text[:50]}...")
+            prediction = model.predict([text])[0]
             logger.info(f"✓ Prediction result: {prediction}")
             
-            # Get confidence
+            # Get confidence scores
             try:
-                proba = model.predict_proba([processed_text])[0]
+                proba = model.predict_proba([text])[0]
                 confidence_score = float(max(proba) * 100)
                 confidence = f"{confidence_score:.1f}%"
-            except:
-                confidence = "85.0%"  # Fallback confidence
+            except Exception as conf_err:
+                logger.warning(f"Could not get confidence score: {conf_err}")
+                confidence = "N/A"  # Fallback confidence
             
-            # Determine result
-            is_real = prediction == 'true' or prediction == '1' or prediction == 1
+            # Determine result - handle both 'true'/'fake' and 1/0 outputs
+            is_real = str(prediction).lower() in ['true', '1', 'real']
             result_display = "🟢 REAL NEWS" if is_real else "🔴 FAKE NEWS"
             
             logger.info(f"✓ Prediction successful: {result_display}")
@@ -180,14 +147,6 @@ def predict():
                 'success': True
             }), 200
             
-        except ValueError as e:
-            if 'idf' in str(e).lower() or 'vectorizer' in str(e).lower():
-                logger.error(f"✗ CRITICAL: Vectorizer not fitted error: {e}")
-                return jsonify({'error': 'Model vectorizer error. Model may be corrupted. Please retrain.', 'success': False}), 503
-            else:
-                logger.error(f"✗ Prediction value error: {e}")
-                return jsonify({'error': f'Prediction failed: {str(e)}', 'success': False}), 500
-        
         except Exception as e:
             logger.error(f"✗ Model prediction error: {e}")
             import traceback
